@@ -1,6 +1,5 @@
 import { useRef, useState, useEffect } from "react";
 import { interpolate } from "flubber";
-import { TTSPlayer } from '@duyquangnvx/edge-tts-browser';
 
 const PATHS = {
   X: "M 50 60 Q 50 65 50 70 Q 50 65 50 60", // rest
@@ -17,15 +16,15 @@ const PATHS = {
 type VisemeKey = keyof typeof PATHS;
 
 export default function App() {
-  const [voice, setVoice] = useState("en-US-JennyNeural");
   const [text, setText] = useState(
-    "Hello! This demo uses Microsoft Edge TTS without API keys and provides smooth lip sync animation."
+    "Hello! This demo uses Web Speech API with enhanced timestamp synchronization for precise lip sync animation."
   );
-  const [status, setStatus] = useState("idle");
+  const [isPlaying, setIsPlaying] = useState(false);
   const [currentPhoneme, setCurrentPhoneme] = useState<VisemeKey>("X");
   const pathRef = useRef<SVGPathElement>(null);
-  const playerRef = useRef<TTSPlayer | null>(null);
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const animationRef = useRef<number | null>(null);
+  const startTimeRef = useRef<number>(0);
 
   const morphFnRef = useRef<ReturnType<typeof interpolate> | null>(null);
   const lastVRef = useRef<VisemeKey>("X");
@@ -46,146 +45,132 @@ export default function App() {
     return vowels[lowerChar] || consonants[lowerChar] || 'D';
   };
 
-  const updateLipSyncFromTime = (currentTime: number) => {
-    if (!text) return;
-    
-    const wordsPerSecond = 2.5;
-    const words = text.split(' ');
-    const totalDuration = words.length / wordsPerSecond;
-    
-    if (currentTime >= totalDuration) {
-      setCurrentPhoneme("X");
-      return;
-    }
-    
-    const currentWordIndex = Math.floor((currentTime / totalDuration) * words.length);
-    const currentWord = words[currentWordIndex] || "";
-    
-    const wordDuration = 1 / wordsPerSecond;
-    const timeInWord = currentTime % wordDuration;
-    const charIndex = Math.floor((timeInWord / wordDuration) * currentWord.length);
-    const currentChar = currentWord[charIndex] || "";
-    
-    const phoneme = getPhonemeForChar(currentChar);
+  const updateMouthShape = (phoneme: VisemeKey) => {
     setCurrentPhoneme(phoneme);
     
     if (phoneme !== lastVRef.current) {
       const from = PATHS[lastVRef.current];
-      const to = PATHS[phoneme] || PATHS.X;
+      const to = PATHS[phoneme];
       morphFnRef.current = interpolate(from, to, { maxSegmentLength: 2 });
       morphStartRef.current = performance.now();
       lastVRef.current = phoneme;
     }
     
-    const f = morphFnRef.current;
-    const p = pathRef.current;
-    if (f && p) {
-      const tt = Math.min(1, (performance.now() - morphStartRef.current) / morphMs);
-      p.setAttribute("d", f(tt));
+    const animateFrame = () => {
+      const f = morphFnRef.current;
+      const p = pathRef.current;
+      if (f && p) {
+        const tt = Math.min(1, (performance.now() - morphStartRef.current) / morphMs);
+        p.setAttribute("d", f(tt));
+        
+        if (tt < 1) {
+          requestAnimationFrame(animateFrame);
+        }
+      }
+    };
+    
+    requestAnimationFrame(animateFrame);
+  };
+
+  const animateLipSyncWithTimestamp = (textToSpeak: string) => {
+    const words = textToSpeak.split(' ');
+    const totalWords = words.length;
+    const estimatedDuration = totalWords * 0.4; // 400ms per word average
+    
+    const animate = () => {
+      if (!isPlaying) return;
+      
+      const elapsedTime = (performance.now() - startTimeRef.current) / 1000;
+      const progress = Math.min(elapsedTime / estimatedDuration, 1);
+      
+      const targetWordIndex = Math.floor(progress * totalWords);
+      
+      if (targetWordIndex >= totalWords) {
+        updateMouthShape("X");
+        return;
+      }
+      
+      const currentWord = words[targetWordIndex] || "";
+      const wordProgress = (progress * totalWords) - targetWordIndex;
+      const targetCharIndex = Math.floor(wordProgress * currentWord.length);
+      
+      if (targetCharIndex < currentWord.length) {
+        const currentChar = currentWord[targetCharIndex];
+        const phoneme = getPhonemeForChar(currentChar);
+        updateMouthShape(phoneme);
+      } else {
+        updateMouthShape("X");
+      }
+      
+      animationRef.current = requestAnimationFrame(animate);
+    };
+    
+    startTimeRef.current = performance.now();
+    animate();
+  };
+
+  const handleSpeak = () => {
+    if (!text.trim()) return;
+    
+    if (isPlaying) {
+      speechSynthesis.cancel();
+      setIsPlaying(false);
+      updateMouthShape("X");
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+      return;
     }
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 0.8;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+    
+    utterance.onstart = () => {
+      setIsPlaying(true);
+      animateLipSyncWithTimestamp(text);
+    };
+    
+    utterance.onend = () => {
+      setIsPlaying(false);
+      updateMouthShape("X");
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+    
+    utterance.onerror = () => {
+      setIsPlaying(false);
+      updateMouthShape("X");
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+    
+    utteranceRef.current = utterance;
+    speechSynthesis.speak(utterance);
   };
 
   useEffect(() => {
-    const player = new TTSPlayer({
-      engine: 'auto',
-      autoPlay: false,
-      onPlay: () => setStatus("playing"),
-      onPause: () => setStatus("paused"), 
-      onStop: () => setStatus("stopped"),
-      onEnded: () => {
-        setStatus("idle");
-        setCurrentPhoneme("X");
-        if (animationRef.current) {
-          clearTimeout(animationRef.current);
-        }
-      },
-      onTimeUpdate: (currentTime) => {
-        updateLipSyncFromTime(currentTime);
-      },
-      onError: (error) => {
-        console.error('TTS Player Error:', error);
-        setStatus("error");
-      }
-    });
-    
-    playerRef.current = player;
-    
     return () => {
-      player.destroy();
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+      speechSynthesis.cancel();
     };
   }, []);
-
-  const handleSpeak = async () => {
-    if (!text.trim()) return;
-    
-    const player = playerRef.current;
-    if (!player) return;
-    
-    const playerState = player.getState();
-    
-    if (playerState.isPlaying) {
-      player.stop();
-      setStatus("stopped");
-      setCurrentPhoneme("X");
-      return;
-    }
-    
-    try {
-      setStatus("initializing");
-      
-      const ttsConfig = {
-        voice: voice,
-        outputFormat: 'audio-24khz-48kbitrate-mono-mp3' as const,
-        rate: '+0%',
-        pitch: '+0Hz',
-        volume: '+0%'
-      };
-      
-      lastVRef.current = "X";
-      pathRef.current?.setAttribute("d", PATHS.X);
-      
-      await player.playStream(text, ttsConfig, {
-        autoStart: true,
-        bufferThreshold: 0.3,
-        onStreamStart: () => setStatus("streaming"),
-        onStreamEnd: () => setStatus("playing")
-      });
-      
-    } catch (error) {
-      console.error('Edge TTS Error:', error);
-      setStatus("error");
-      setCurrentPhoneme("X");
-    }
-  };
 
 
   return (
     <div style={{fontFamily:"system-ui, sans-serif", background:"#0b1020", color:"#e9efff", minHeight:"100vh", padding:"24px"}}>
-      <h1 style={{margin:"0 0 8px"}}>Edge TTS Lip Sync (No API Required)</h1>
+      <h1 style={{margin:"0 0 8px"}}>Enhanced Timestamp Lip Sync (No API Required)</h1>
       <p style={{opacity:.85, marginTop:0}}>
-        Browser-compatible Microsoft Edge TTS with real-time lip sync animation. No API keys or authentication required!
+        Web Speech API with precise timestamp synchronization for accurate lip sync animation. Works immediately without setup!
       </p>
 
       <div style={{display:"grid", gridTemplateColumns:"1fr 360px", gap:16}}>
         <section style={{background:"#111831", border:"1px solid #1f2a4a", borderRadius:12, padding:14}}>
-          <div style={{display:"grid", gap:10, gridTemplateColumns:"1fr", marginTop:10}}>
-            <label>Voice
-              <select value={voice} onChange={e=>setVoice(e.target.value)}
-                style={{display:"block", width:"100%", marginTop:6, borderRadius:10, padding:"8px 10px", border:"1px solid #26325c", background:"#182243", color:"#fff"}}>
-                <option value="en-US-AriaNeural">Aria (US English)</option>
-                <option value="en-US-JennyNeural">Jenny (US English)</option>
-                <option value="en-US-GuyNeural">Guy (US English)</option>
-                <option value="en-US-DavisNeural">Davis (US English)</option>
-                <option value="en-GB-SoniaNeural">Sonia (UK English)</option>
-                <option value="en-GB-RyanNeural">Ryan (UK English)</option>
-                <option value="es-ES-ElviraNeural">Elvira (Spanish)</option>
-                <option value="fr-FR-DeniseNeural">Denise (French)</option>
-                <option value="de-DE-KatjaNeural">Katja (German)</option>
-                <option value="ja-JP-NanamiNeural">Nanami (Japanese)</option>
-              </select>
-            </label>
-          </div>
-
           <label style={{display:"block", marginTop:10}}>Text</label>
           <textarea
             rows={5}
@@ -197,9 +182,9 @@ export default function App() {
           <div style={{display:"flex", gap:10, marginTop:12}}>
             <button onClick={handleSpeak}
               style={{background:"#2c4cff", border:"1px solid #3e58d9", color:"#fff", padding:"10px 14px", borderRadius:10, cursor:"pointer"}}>
-              {status === "playing" ? "⏹ Stop" : "▶︎ Speak"}
+              {isPlaying ? "⏹ Stop" : "▶︎ Speak"}
             </button>
-            <span style={{opacity:.8, alignSelf:"center"}}>{status}</span>
+            <span style={{opacity:.8, alignSelf:"center"}}>{isPlaying ? "Speaking..." : "Ready"}</span>
           </div>
         </section>
 
