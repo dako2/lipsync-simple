@@ -61,6 +61,13 @@
             <feMergeNode in="SourceGraphic"/>
           </feMerge>
         </filter>
+        <filter id="eyebrowGlow" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="1" result="coloredBlur"/>
+          <feMerge> 
+            <feMergeNode in="coloredBlur"/>
+            <feMergeNode in="SourceGraphic"/>
+          </feMerge>
+        </filter>
         <radialGradient id="faceGradient" cx="0.4" cy="0.25" r="0.9">
           <stop offset="0%" stop-color="#fff5e6"/>
           <stop offset="40%" stop-color="#ffecd1"/>
@@ -104,9 +111,9 @@
       
       <!-- Enhanced eyebrows with gradient and texture -->
       <path d="M 82 118 Q 90 114 100 115 Q 115 116 130 118 Q 135 119 138 121" 
-            stroke="url(#eyebrowGradient)" stroke-width="5" stroke-linecap="round" fill="none" filter="url(#softGlow)"/>
+            stroke="url(#eyebrowGradient)" stroke-width="5" stroke-linecap="round" fill="none" filter="url(#eyebrowGlow)"/>
       <path d="M 162 121 Q 165 119 170 118 Q 185 116 200 115 Q 210 114 218 118" 
-            stroke="url(#eyebrowGradient)" stroke-width="5" stroke-linecap="round" fill="none" filter="url(#softGlow)"/>
+            stroke="url(#eyebrowGradient)" stroke-width="5" stroke-linecap="round" fill="none" filter="url(#eyebrowGlow)"/>
       
       <!-- Eye socket subtle shading -->
       <ellipse cx="110" cy="138" rx="22" ry="16" fill="#f0d5b7" opacity="0.4"/>
@@ -240,15 +247,19 @@ async function ensureFlubber(){
   }
 
   const visemePaths = {
-    X: roundedRectPath(72, 4, 2),
-    A: ellipsePath(36, 24),
-    B: roundedRectPath(80, 16, 8),
-    C: ellipsePath(18, 14),
-    D: ellipsePath(28, 14),
-    E: roundedRectPath(80, 10, 6),
-    F: roundedRectPath(68, 14, 7),
-    G: ellipsePath(22, 12),
-    H: ellipsePath(40, 18)
+    X: "M -36 -2 Q -36 -4 -34 -4 L 34 -4 Q 36 -4 36 -2 L 36 2 Q 36 4 34 4 L -34 4 Q -36 4 -36 2 Z",
+    A: "M -28 -18 Q -32 -22 -28 -26 Q -20 -30 0 -30 Q 20 -30 28 -26 Q 32 -22 28 -18 Q 24 -12 20 -8 Q 12 0 0 0 Q -12 0 -20 -8 Q -24 -12 -28 -18 Z",
+    O: "M -24 -16 Q -28 -20 -24 -24 Q -16 -28 0 -28 Q 16 -28 24 -24 Q 28 -20 24 -16 Q 20 -10 16 -6 Q 8 2 0 2 Q -8 2 -16 -6 Q -20 -10 -24 -16 Z",
+    C: "M -32 -8 Q -34 -10 -32 -12 L 32 -12 Q 34 -10 32 -8 L 32 8 Q 34 10 32 12 L -32 12 Q -34 10 -32 8 Z",
+    G: "M -20 -10 Q -22 -12 -20 -14 L 20 -14 Q 22 -12 20 -10 L 20 10 Q 22 12 20 14 L -20 14 Q -22 12 -20 10 Z",
+    L: "M -30 -6 Q -32 -8 -30 -10 L 30 -10 Q 32 -8 30 -6 L 30 6 Q 32 8 30 10 L -30 10 Q -32 8 -30 6 Z",
+    B: "M -2 -2 L 2 -2 L 2 2 L -2 2 Z",
+    F: "M -26 -8 Q -28 -10 -26 -12 L 26 -12 Q 28 -10 26 -8 L 26 -2 Q 28 0 26 2 L -26 2 Q -28 0 -26 -2 Z",
+    E: "M -30 -6 Q -32 -8 -30 -10 L 30 -10 Q 32 -8 30 -6 L 30 6 Q 32 8 30 10 L -30 10 Q -32 8 -30 6 Z",
+    T: "M -24 -8 Q -26 -10 -24 -12 L 24 -12 Q 26 -10 24 -8 L 24 8 Q 26 10 24 12 L -24 12 Q -26 10 -24 8 Z",
+    S: "M -22 -6 Q -24 -8 -22 -10 L 22 -10 Q 24 -8 22 -6 L 22 6 Q 24 8 22 10 L -22 10 Q -24 8 -22 6 Z",
+    U: "M -20 -14 Q -24 -18 -20 -22 Q -12 -26 0 -26 Q 12 -26 20 -22 Q 24 -18 20 -14 Q 16 -8 12 -4 Q 4 4 0 4 Q -4 4 -12 -4 Q -16 -8 -20 -14 Z",
+    Q: "M -18 -12 Q -22 -16 -18 -20 Q -10 -24 0 -24 Q 10 -24 18 -20 Q 22 -16 18 -12 Q 14 -6 10 -2 Q 2 6 0 6 Q -2 6 -10 -2 Q -14 -6 -18 -12 Z"
   };
 
   const mouthPathEl = document.getElementById('mouthPath');
@@ -310,15 +321,19 @@ async function ensureFlubber(){
   // Letter → viseme heuristic
   const char2vis = (ch) => {
     ch = ch.toLowerCase();
-    if ("pbm".includes(ch)) return "B";
+    if ("aei".includes(ch)) return "A";
+    if ("o".includes(ch)) return "O";
+    if ("cdnstxyz".includes(ch)) return "C";
+    if ("gk".includes(ch)) return "G";
+    if ("l".includes(ch)) return "L";
+    if ("bmp".includes(ch)) return "B";
     if ("fv".includes(ch)) return "F";
-    if ("oouw".includes(ch)) return "C";
-    if ("eeiy".includes(ch)) return "E";
-    if ("a".includes(ch)) return "A";
-    if ("jhshchrz".includes(ch)) return "D";
-    if ("tcdgnkql".includes(ch)) return "D";
+    if ("u".includes(ch)) return "U";
+    if ("qw".includes(ch)) return "Q";
+    if ("th".includes(ch)) return "T";
+    if ("sh".includes(ch) || "ch".includes(ch) || "j".includes(ch)) return "S";
     if (ch === " ") return "X";
-    return "G";
+    return "X";
   };
 
   let speaking=false, startMs=0, lastBoundaryMs=0, charIdx=0, raf=0;
