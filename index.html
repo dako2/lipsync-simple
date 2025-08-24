@@ -28,7 +28,7 @@
 
 <div class="wrap">
   <section class="panel">
-    <div class="label">Enter text, pick a system voice, then click Speak. Uses <code>flubber</code> for smooth morphing (with CDN fallback).</div>
+    <div class="label">Enter text, pick a system voice, then click Speak. Uses Web Speech API with enhanced lip sync and <code>flubber</code> morphing.</div>
     <textarea id="text">Hello there! This demo morphs SVG mouth shapes with flubber while the browser TTS speaks the text.</textarea>
     <div class="row" style="margin-top:8px">
       <label>Voice: <select id="voiceSel"></select></label>
@@ -303,7 +303,7 @@ async function ensureFlubber(){
   const LEl = document.getElementById('L');
   const barEl = document.getElementById('bar');
 
-  // Load voices
+  // Load system voices
   let voices = [];
   function loadVoices(){
     voices = window.speechSynthesis.getVoices();
@@ -314,6 +314,7 @@ async function ensureFlubber(){
       opt.textContent=`${v.name} (${v.lang})${v.default?' — default':''}`;
       voiceSel.appendChild(opt);
     });
+    logStatus(`Loaded ${voices.length} system voices successfully.`);
   }
   loadVoices();
   window.speechSynthesis.onvoiceschanged = loadVoices;
