@@ -1,13 +1,272 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>TTS Lip Sync with Flubber (Fixed Loader)</title>
+<style>
+  :root { --bg:#0b1020; --card:#111831; --fg:#dfe7ff; --accent:#7aa2ff; }
+  body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.45 system-ui,Segoe UI,Roboto,Helvetica,Arial}
+  header{padding:16px 20px;border-bottom:1px solid #1f2a4a}
+  h1{margin:0;font-size:18px}
+  .wrap{display:grid;grid-template-columns:420px 1fr;gap:16px;padding:16px}
+  .panel{background:var(--card);border:1px solid #1f2a4a;border-radius:14px;padding:14px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  button,select,textarea,input[type=range]{background:#182243;border:1px solid #26325c;color:var(--fg);padding:8px 10px;border-radius:10px;cursor:pointer}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  textarea{width:100%;min-height:120px;font:14px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace}
+  .face-wrap{display:flex;align-items:center;justify-content:center;height:460px}
+  .viseme{display:inline-block;min-width:2ch;text-align:center;font-weight:700;color:var(--accent)}
+  .progress{height:6px;background:#0f1531;border-radius:6px;overflow:hidden;margin-top:10px}
+  .bar{height:100%;width:0;background:linear-gradient(90deg,var(--accent),#b387ff)}
+  .label{opacity:.8;font-size:12px}
+  small{opacity:.8}
+</style>
+</head>
+<body>
+<header><h1>Browser TTS Lip Sync + Flubber (Robust)</h1></header>
+
+<div class="wrap">
+  <section class="panel">
+    <div class="label">Enter text, pick a system voice, then click Speak. Uses <code>flubber</code> for smooth morphing (with CDN fallback).</div>
+    <textarea id="text">Hello there! This demo morphs SVG mouth shapes with flubber while the browser TTS speaks the text.</textarea>
+    <div class="row" style="margin-top:8px">
+      <label>Voice: <select id="voiceSel"></select></label>
+      <label>Rate: <input id="rate" type="range" min="0.5" max="1.5" step="0.05" value="1.0"></label>
+      <label>Pitch: <input id="pitch" type="range" min="0" max="2" step="0.1" value="1.0"></label>
+      <label>Volume: <input id="vol" type="range" min="0" max="1" step="0.05" value="1.0"></label>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button id="speak">▶︎ Speak</button>
+      <button id="stop" disabled>⏹ Stop</button>
+    </div>
+    <div style="margin-top:12px">
+      <div>Current viseme: <span id="v" class="viseme">X</span></div>
+      <div>t=<span id="t">0.000</span>s · char <span id="i">0</span>/<span id="L">0</span></div>
+      <div class="progress"><div id="bar" class="bar"></div></div>
+      <small id="status" style="display:block;margin-top:8px;opacity:.8"></small>
+    </div>
+  </section>
+
+  <section class="panel face-wrap">
+    <svg id="face" viewBox="0 0 300 360" width="340" height="440" aria-label="avatar">
+      <defs>
+        <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
+          <feDropShadow dx="0" dy="3" stdDeviation="6" flood-color="#000" flood-opacity="0.4"/>
+        </filter>
+      </defs>
+      <circle cx="150" cy="170" r="120" fill="#f4decf" filter="url(#shadow)"/>
+      <ellipse cx="110" cy="140" rx="16" ry="10" fill="#222"/>
+      <ellipse cx="190" cy="140" rx="16" ry="10" fill="#222"/>
+      <g id="mouthG" transform="translate(150,220)">
+        <path id="mouthPath" fill="#7a1a1a" d="" />
+      </g>
+    </svg>
+  </section>
+</div>
+
+<script>
+// Robust flubber loader: try jsdelivr, then unpkg, then fallback to no-op.
+const statusEl = document.getElementById('status');
+function logStatus(msg){ statusEl.textContent = msg || ''; }
+function loadScript(src){
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src; s.async = true; s.onload = resolve; s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+async function ensureFlubber(){
+  if (window.flubber && window.flubber.interpolate) return 'global';
+  try {
+    await loadScript('https://cdn.jsdelivr.net/npm/flubber@0.4.2/dist/flubber.min.js');
+    if (window.flubber && window.flubber.interpolate) return 'jsdelivr';
+  } catch (e) {}
+  try {
+    await loadScript('https://unpkg.com/flubber@0.4.2/dist/flubber.min.js');
+    if (window.flubber && window.flubber.interpolate) return 'unpkg';
+  } catch (e) {}
+  // Fallback (no-op morph: snap to end)
+  window.flubber = {
+    interpolate: (a,b) => {
+      return (t) => (t < 1 ? a : b);
+    }
+  };
+  return 'fallback';
+}
+</script>
+
+<script>
+(async () => {
+  const source = await ensureFlubber();
+  logStatus(source === 'fallback'
+    ? 'Flubber CDN failed; using no-op fallback (shapes will snap). If behind a firewall, download flubber locally and reference it.'
+    : `Flubber loaded from ${source}.`);
+
+  // --- SVG path helpers ---
+  function roundedRectPath(w, h, r){
+    w = Math.max(1, w); h = Math.max(1, h);
+    r = Math.min(r, w/2, h/2);
+    const x = -w/2, y = -h/2;
+    return [
+      `M ${x+r} ${y}`,
+      `H ${x+w-r}`,
+      `Q ${x+w} ${y} ${x+w} ${y+r}`,
+      `V ${y+h-r}`,
+      `Q ${x+w} ${y+h} ${x+w-r} ${y+h}`,
+      `H ${x+r}`,
+      `Q ${x} ${y+h} ${x} ${y+h-r}`,
+      `V ${y+r}`,
+      `Q ${x} ${y} ${x+r} ${y}`,
+      `Z`
+    ].join(' ');
+  }
+  function ellipsePath(rx, ry){
+    rx = Math.max(1, rx); ry = Math.max(1, ry);
+    return `M ${-rx} 0 a ${rx} ${ry} 0 1 0 ${2*rx} 0 a ${rx} ${ry} 0 1 0 ${-2*rx} 0 Z`;
+  }
+
+  const visemePaths = {
+    X: roundedRectPath(72, 4, 2),
+    A: ellipsePath(36, 24),
+    B: roundedRectPath(80, 16, 8),
+    C: ellipsePath(18, 14),
+    D: ellipsePath(28, 14),
+    E: roundedRectPath(80, 10, 6),
+    F: roundedRectPath(68, 14, 7),
+    G: ellipsePath(22, 12),
+    H: ellipsePath(40, 18)
+  };
+
+  const mouthPathEl = document.getElementById('mouthPath');
+  let currentViseme = 'X';
+  let currentPath = visemePaths[currentViseme];
+  mouthPathEl.setAttribute('d', currentPath);
+
+  let animToken = 0;
+  function morphToViseme(v, durMs = 140){
+    const next = visemePaths[v] || visemePaths['X'];
+    if (next === currentPath) return;
+    const token = ++animToken;
+    const interp = window.flubber.interpolate(currentPath, next, {maxSegmentLength: 3});
+    const t0 = performance.now();
+    function step(){
+      if (token !== animToken) return;
+      const t = performance.now();
+      const u = Math.min(1, (t - t0) / durMs);
+      const eased = u < 0.5 ? 2*u*u : -1 + (4 - 2*u) * u;
+      mouthPathEl.setAttribute('d', interp(eased));
+      if (u < 1) requestAnimationFrame(step);
+      else currentPath = next;
+    }
+    requestAnimationFrame(step);
+    currentViseme = v;
+    vEl.textContent = v;
+  }
+
+  // --- UI elements ---
+  const txt = document.getElementById('text');
+  const speakBtn = document.getElementById('speak');
+  const stopBtn = document.getElementById('stop');
+  const voiceSel = document.getElementById('voiceSel');
+  const rateEl = document.getElementById('rate');
+  const pitchEl = document.getElementById('pitch');
+  const volEl = document.getElementById('vol');
+
+  const vEl = document.getElementById('v');
+  const tEl = document.getElementById('t');
+  const iEl = document.getElementById('i');
+  const LEl = document.getElementById('L');
+  const barEl = document.getElementById('bar');
+
+  // Load voices
+  let voices = [];
+  function loadVoices(){
+    voices = window.speechSynthesis.getVoices();
+    voiceSel.innerHTML = '';
+    voices.forEach((v,i)=>{
+      const opt = document.createElement('option');
+      opt.value=i;
+      opt.textContent=`${v.name} (${v.lang})${v.default?' — default':''}`;
+      voiceSel.appendChild(opt);
+    });
+  }
+  loadVoices();
+  window.speechSynthesis.onvoiceschanged = loadVoices;
+
+  // Letter → viseme heuristic
+  const char2vis = (ch) => {
+    ch = ch.toLowerCase();
+    if ("pbm".includes(ch)) return "B";
+    if ("fv".includes(ch)) return "F";
+    if ("oouw".includes(ch)) return "C";
+    if ("eeiy".includes(ch)) return "E";
+    if ("a".includes(ch)) return "A";
+    if ("jhshchrz".includes(ch)) return "D";
+    if ("tcdgnkql".includes(ch)) return "D";
+    if (ch === " ") return "X";
+    return "G";
+  };
+
+  let speaking=false, startMs=0, lastBoundaryMs=0, charIdx=0, raf=0;
+  function tick(){
+    raf = requestAnimationFrame(tick);
+    const now = performance.now();
+    if (speaking) {
+      const t = (now - startMs)/1000;
+      tEl.textContent = t.toFixed(3);
+      iEl.textContent = charIdx;
+      LEl.textContent = txt.value.length;
+      const pct = Math.min(100, (charIdx / Math.max(1, txt.value.length)) * 100);
+      barEl.style.width = pct + '%';
+      if (now - lastBoundaryMs > 160) morphToViseme("X", 100);
+    }
+  }
+
+  speakBtn.onclick = () => {
+    if (speaking) return;
+    const utter = new SpeechSynthesisUtterance(txt.value);
+    if (voices.length && voiceSel.value !== "") utter.voice = voices[+voiceSel.value];
+    utter.rate = +rateEl.value;
+    utter.pitch = +pitchEl.value;
+    utter.volume = +volEl.value;
+
+    speaking=true; startMs=performance.now(); lastBoundaryMs=startMs; charIdx=0;
+    stopBtn.disabled=false;
+    morphToViseme("G", 100);
+
+    utter.onboundary = (e) => {
+      if (!speaking) return;
+      const idx = e.charIndex || 0;
+      charIdx = idx;
+      lastBoundaryMs = performance.now();
+      const ch = txt.value[idx] || " ";
+      morphToViseme(char2vis(ch), 100);
+    };
+    utter.onend = () => {
+      speaking=false; stopBtn.disabled=true;
+      morphToViseme("X", 120);
+      barEl.style.width = "0%"; tEl.textContent = "0.000"; iEl.textContent = "0"; LEl.textContent = "0";
+      cancelAnimationFrame(raf);
+    };
+    utter.onerror = () => {
+      speaking=false; stopBtn.disabled=true; morphToViseme("X", 120);
+      cancelAnimationFrame(raf);
+    };
+
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utter);
+    cancelAnimationFrame(raf);
+    tick();
+  };
+
+  stopBtn.onclick = () => {
+    window.speechSynthesis.cancel();
+    speaking=false; stopBtn.disabled=true; morphToViseme("X", 120);
+    barEl.style.width = "0%"; tEl.textContent = "0.000"; iEl.textContent = "0"; LEl.textContent = "0";
+    cancelAnimationFrame(raf);
+  };
+})();
+</script>
+</body>
 </html>
