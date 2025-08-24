@@ -54,12 +54,55 @@
         <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
           <feDropShadow dx="0" dy="3" stdDeviation="6" flood-color="#000" flood-opacity="0.4"/>
         </filter>
+        <radialGradient id="faceGradient" cx="0.5" cy="0.3" r="0.8">
+          <stop offset="0%" stop-color="#ffecd1"/>
+          <stop offset="70%" stop-color="#f4decf"/>
+          <stop offset="100%" stop-color="#e8c5a0"/>
+        </radialGradient>
+        <radialGradient id="eyeGradient" cx="0.3" cy="0.3" r="0.7">
+          <stop offset="0%" stop-color="#4a90e2"/>
+          <stop offset="60%" stop-color="#2c5aa0"/>
+          <stop offset="100%" stop-color="#1a365d"/>
+        </radialGradient>
       </defs>
-      <circle cx="150" cy="170" r="120" fill="#f4decf" filter="url(#shadow)"/>
-      <ellipse cx="110" cy="140" rx="16" ry="10" fill="#222"/>
-      <ellipse cx="190" cy="140" rx="16" ry="10" fill="#222"/>
+      
+      <!-- Face with gradient -->
+      <circle cx="150" cy="170" r="120" fill="url(#faceGradient)" filter="url(#shadow)"/>
+      
+      <!-- Subtle cheek highlights -->
+      <ellipse cx="110" cy="185" rx="15" ry="8" fill="#ffecd1" opacity="0.6"/>
+      <ellipse cx="190" cy="185" rx="15" ry="8" fill="#ffecd1" opacity="0.6"/>
+      
+      <!-- Eyebrows -->
+      <path d="M 85 120 Q 110 115 135 120" stroke="#8b4513" stroke-width="4" stroke-linecap="round" fill="none"/>
+      <path d="M 165 120 Q 190 115 215 120" stroke="#8b4513" stroke-width="4" stroke-linecap="round" fill="none"/>
+      
+      <!-- Eye whites -->
+      <ellipse cx="110" cy="140" rx="18" ry="12" fill="#ffffff"/>
+      <ellipse cx="190" cy="140" rx="18" ry="12" fill="#ffffff"/>
+      
+      <!-- Iris -->
+      <circle cx="110" cy="140" r="10" fill="url(#eyeGradient)"/>
+      <circle cx="190" cy="140" r="10" fill="url(#eyeGradient)"/>
+      
+      <!-- Pupils -->
+      <circle cx="110" cy="140" r="4" fill="#000"/>
+      <circle cx="190" cy="140" r="4" fill="#000"/>
+      
+      <!-- Eye highlights -->
+      <circle cx="112" cy="137" r="2" fill="#ffffff" opacity="0.8"/>
+      <circle cx="192" cy="137" r="2" fill="#ffffff" opacity="0.8"/>
+      
+      <!-- Nose -->
+      <path d="M 145 155 Q 150 165 155 155" stroke="#d4a574" stroke-width="2" fill="none" opacity="0.7"/>
+      <ellipse cx="147" cy="162" rx="2" ry="1" fill="#d4a574" opacity="0.5"/>
+      <ellipse cx="153" cy="162" rx="2" ry="1" fill="#d4a574" opacity="0.5"/>
+      
+      <!-- Mouth area with subtle shadow -->
+      <ellipse cx="150" cy="220" rx="25" ry="15" fill="#e8c5a0" opacity="0.3"/>
+      
       <g id="mouthG" transform="translate(150,220)">
-        <path id="mouthPath" fill="#7a1a1a" d="" />
+        <path id="mouthPath" fill="#c44569" stroke="#a0336b" stroke-width="1" d="" />
       </g>
     </svg>
   </section>
